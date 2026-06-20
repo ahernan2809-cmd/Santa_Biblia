@@ -1567,9 +1567,14 @@ let availableVoices = [];
 let currentUtterance = null;
 let selectedVoiceIndex = 0;
 
-window.addEventListener('DOMContentLoaded', () => {
-  initVoiceControls();
-});
+function initializeVoiceControlsWhenReady() {
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', initVoiceControls);
+  } else {
+    initVoiceControls();
+  }
+}
+initializeVoiceControlsWhenReady();
 
 // Cargar Biblia JSON al iniciar
 (async () => {
@@ -1687,6 +1692,9 @@ function initVoiceControls() {
   }
   populateVoiceList();
   synth.onvoiceschanged = populateVoiceList;
+  // Fallback for browsers that load voices asynchronously without firing the event
+  setTimeout(populateVoiceList, 250);
+  setTimeout(populateVoiceList, 1000);
 }
 
 // FONT SIZE CONTROL
