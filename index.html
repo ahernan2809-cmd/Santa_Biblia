@@ -390,7 +390,7 @@
   .bb-btn { position:relative; }
 
   /* ─── SPACE FOR BOTTOM BAR ─── */
-  .content { padding-bottom:80px; }
+  .content { padding-bottom:120px; }
 
   /* ─── SEARCH ─── */
   .search-bar {
@@ -404,6 +404,31 @@
   }
   .search-bar input::placeholder { color:rgba(201,168,76,0.4); }
   .search-bar span { color:rgba(201,168,76,0.5); }
+
+  /* ─── VOICE CONTROLS ─── */
+  .voice-controls {
+    position:fixed; bottom:120px; right:20px;
+    background:var(--dark); border:1px solid rgba(201,168,76,0.35);
+    border-radius:16px; padding:18px; width:280px;
+    display:none; flex-direction:column; gap:10px; z-index:999;
+    box-shadow:0 16px 40px rgba(0,0,0,0.35);
+  }
+  .voice-controls.active { display:flex; }
+  .voice-controls h4 { color:var(--gold); margin:0; font-size:0.95rem; }
+  .voice-controls label { display:block; color:var(--cream); font-size:0.78rem; margin-bottom:4px; }
+  .voice-controls select,
+  .voice-controls input {
+    width:100%; padding:10px 12px; border-radius:10px;
+    border:1px solid rgba(201,168,76,0.25); background:var(--dark2);
+    color:var(--cream); font-family:Georgia,serif; font-size:0.9rem;
+  }
+  .voice-controls button {
+    flex:1; background:var(--gold); color:var(--dark);
+    border:none; padding:10px 12px; border-radius:10px;
+    cursor:pointer; font-family:Georgia,serif; font-size:0.9rem;
+  }
+  .voice-controls .voice-btn-row { display:flex; gap:8px; }
+  .voice-controls .voice-btn-row button { width:100%; }
 
   /* ─── RESPONSIVE ─── */
   @media (min-width:600px) {
@@ -508,6 +533,7 @@
           <option value="18">Grande</option>
           <option value="20">Muy grande</option>
         </select>
+        <button class="nav-icon-btn" title="Voz" onclick="toggleVoiceControls()">🔊</button>
         <button class="nav-icon-btn" onclick="prevChapter()">‹</button>
         <button class="nav-icon-btn" onclick="nextChapter()">›</button>
       </div>
@@ -565,6 +591,7 @@
     </div>
     <div class="day-tabs" id="day-tabs"></div>
     <div id="daily-content"></div>
+    <div class="page-footer"><span class="byline">By Jorge Pereira</span></div>
   </div>
   <div class="bottom-bar">
     <button class="bb-btn" onclick="navigate('home')"><span class="bb-icon">🏠</span>Inicio</button>
@@ -599,6 +626,7 @@
       <p>Dios tiene una palabra especial para ti hoy</p>
     </div>
     <div id="special-cards"></div>
+    <div class="page-footer"><span class="byline">By Jorge Pereira</span></div>
   </div>
   <div class="bottom-bar">
     <button class="bb-btn" onclick="navigate('home')"><span class="bb-icon">🏠</span>Inicio</button>
@@ -633,6 +661,7 @@
       <p>Tu colección personal de versículos</p>
     </div>
     <div id="favorites-list"></div>
+    <div class="page-footer"><span class="byline">By Jorge Pereira</span></div>
   </div>
   <div class="bottom-bar">
     <button class="bb-btn" onclick="navigate('home')"><span class="bb-icon">🏠</span>Inicio</button>
@@ -640,6 +669,26 @@
     <button class="bb-btn" onclick="navigate('daily')"><span class="bb-icon">🌅</span>Diario</button>
     <button class="bb-btn" onclick="navigate('special')"><span class="bb-icon">🙏</span>Especial</button>
     <button class="bb-btn active" onclick="navigate('favorites')"><span class="bb-icon">⭐</span>Favoritos</button>
+  </div>
+</div>
+
+<div id="voice-controls" class="voice-controls">
+  <h4>Lectura en voz alta</h4>
+  <label for="voice-select">Selecciona la voz</label>
+  <select id="voice-select" onchange="selectedVoiceIndex=parseInt(this.value)"></select>
+  <label for="voice-speed">Velocidad</label>
+  <input id="voice-speed" type="range" min="0.75" max="1.5" step="0.05" value="1" onchange="setVoiceSpeed(this.value)">
+  <div style="display:flex; justify-content:space-between; gap:8px;">
+    <span style="font-size:0.8rem; color:var(--cream);">x<span id="voice-speed-label">1.00</span></span>
+    <span style="font-size:0.8rem; color:rgba(201,168,76,0.8);">Puedes elegir voz masculina o femenina</span>
+  </div>
+  <div class="voice-btn-row">
+    <button onclick="speakCurrentChapter()">Leer capítulo</button>
+    <button onclick="pauseSpeech()">Pausa</button>
+  </div>
+  <div class="voice-btn-row">
+    <button onclick="resumeSpeech()">Continuar</button>
+    <button onclick="stopSpeech()">Detener</button>
   </div>
 </div>
 
@@ -1509,6 +1558,7 @@ function showSearch() {
 // ═══════════════════════════════════════════════════════
 updateFavBadge();
 currentDayIndex = new Date().getDay();
+initVoiceControls();
 
 // Cargar Biblia JSON al iniciar
 (async () => {
@@ -1522,6 +1572,120 @@ currentDayIndex = new Date().getDay();
     alert('⚠ Error al cargar Biblia.json\n\nVerifica que:\n1. El archivo "Biblia.json" esté en la misma carpeta\n2. Nombrado correctamente (con mayúscula)');
   }
 })();
+
+const VOICE_GENDER_PATTERNS = {
+  female: /female|frau|femme|mujer|woman|girl|donna|dame|feminine|mujer|femenina/i,
+  male: /male|man|hombre|boy|hombre|homme|masculine/i
+};
+let voiceRate = 1;
+let availableVoices = [];
+let currentUtterance = null;
+let selectedVoiceIndex = 0;
+
+function getSpeechSynthesis() {
+  return window.speechSynthesis || window.webkitSpeechSynthesis || null;
+}
+function detectVoiceGender(name) {
+  if (!name) return '';
+  if (VOICE_GENDER_PATTERNS.female.test(name)) return 'Mujer';
+  if (VOICE_GENDER_PATTERNS.male.test(name)) return 'Hombre';
+  return '';
+}
+function populateVoiceList() {
+  const synth = getSpeechSynthesis();
+  const select = document.getElementById('voice-select');
+  if (!select) return;
+  availableVoices = synth ? synth.getVoices() : [];
+  select.innerHTML = '';
+
+  if (availableVoices.length === 0) {
+    const option = document.createElement('option');
+    option.textContent = 'No se encontraron voces disponibles';
+    option.value = '';
+    select.appendChild(option);
+    return;
+  }
+
+  availableVoices.forEach((voice, index) => {
+    const option = document.createElement('option');
+    const gender = detectVoiceGender(voice.name);
+    option.value = index;
+    option.textContent = `${voice.name} (${voice.lang}${gender ? ' - ' + gender : ''})`;
+    select.appendChild(option);
+  });
+  select.value = selectedVoiceIndex;
+}
+
+function setVoiceSpeed(val) {
+  voiceRate = parseFloat(val) || 1;
+  document.getElementById('voice-speed-label').textContent = voiceRate.toFixed(2);
+  if (currentUtterance) {
+    currentUtterance.rate = voiceRate;
+  }
+}
+
+function speakCurrentChapter() {
+  const synth = getSpeechSynthesis();
+  if (!synth) {
+    alert('Tu navegador no soporta la síntesis de voz.');
+    return;
+  }
+  stopSpeech();
+  const text = getChapterText(currentBook, currentChapter);
+  if (!text) {
+    alert('No hay texto disponible para leer.');
+    return;
+  }
+  const utterance = new SpeechSynthesisUtterance(`${currentBook}, capítulo ${currentChapter}. ${text}`);
+  const voice = availableVoices[selectedVoiceIndex] || availableVoices.find(v => v.default) || availableVoices[0];
+  if (voice) utterance.voice = voice;
+  utterance.rate = voiceRate;
+  utterance.onend = () => { currentUtterance = null; };
+  utterance.onerror = (event) => { console.error('TTS Error:', event.error); };
+  currentUtterance = utterance;
+  synth.speak(utterance);
+}
+
+function pauseSpeech() {
+  const synth = getSpeechSynthesis();
+  if (!synth) return;
+  if (synth.speaking && !synth.paused) {
+    synth.pause();
+  }
+}
+
+function resumeSpeech() {
+  const synth = getSpeechSynthesis();
+  if (!synth) return;
+  if (synth.paused) {
+    synth.resume();
+  }
+}
+
+function stopSpeech() {
+  const synth = getSpeechSynthesis();
+  if (!synth) return;
+  if (synth.speaking || synth.paused) {
+    synth.cancel();
+  }
+  currentUtterance = null;
+}
+
+function toggleVoiceControls() {
+  const controls = document.getElementById('voice-controls');
+  controls.classList.toggle('active');
+}
+
+function initVoiceControls() {
+  const synth = getSpeechSynthesis();
+  if (!synth) {
+    const select = document.getElementById('voice-select');
+    if (select) select.innerHTML = '<option>La síntesis de voz no está disponible</option>';
+    return;
+  }
+  populateVoiceList();
+  synth.onvoiceschanged = populateVoiceList;
+}
 
 // FONT SIZE CONTROL
 function changeFontSize(val) {
