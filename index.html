@@ -1558,7 +1558,18 @@ function showSearch() {
 // ═══════════════════════════════════════════════════════
 updateFavBadge();
 currentDayIndex = new Date().getDay();
-initVoiceControls();
+const VOICE_GENDER_PATTERNS = {
+  female: /female|frau|femme|mujer|woman|girl|donna|dame|feminine|mujer|femenina/i,
+  male: /male|man|hombre|boy|hombre|homme|masculine/i
+};
+let voiceRate = 1;
+let availableVoices = [];
+let currentUtterance = null;
+let selectedVoiceIndex = 0;
+
+window.addEventListener('DOMContentLoaded', () => {
+  initVoiceControls();
+});
 
 // Cargar Biblia JSON al iniciar
 (async () => {
@@ -1572,15 +1583,6 @@ initVoiceControls();
     alert('⚠ Error al cargar Biblia.json\n\nVerifica que:\n1. El archivo "Biblia.json" esté en la misma carpeta\n2. Nombrado correctamente (con mayúscula)');
   }
 })();
-
-const VOICE_GENDER_PATTERNS = {
-  female: /female|frau|femme|mujer|woman|girl|donna|dame|feminine|mujer|femenina/i,
-  male: /male|man|hombre|boy|hombre|homme|masculine/i
-};
-let voiceRate = 1;
-let availableVoices = [];
-let currentUtterance = null;
-let selectedVoiceIndex = 0;
 
 function getSpeechSynthesis() {
   return window.speechSynthesis || window.webkitSpeechSynthesis || null;
